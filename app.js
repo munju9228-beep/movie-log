@@ -74,7 +74,8 @@ const state = {
   currentId: null,
   posts: [],
   unsubPosts: null,
-  pendingPhotos: []
+  pendingPhotos: [],
+  rateDraft: null // 평가하기 패널이 열린 콘텐츠 { id, value }
 };
 
 // ───────────── 공통 도우미 ─────────────
@@ -185,31 +186,47 @@ function askIdentity({ needRoom, cancellable }) {
 }
 
 // ───────────── 별점 위젯 ─────────────
-function starsHtml(value, editableId) {
-  const v = value || 0;
+function starSpans(v) {
   let s = '';
   for (let i = 1; i <= 5; i++) {
     const pct = Math.max(0, Math.min(1, v - (i - 1))) * 100;
     s += `<span class="star" data-i="${i}"><span class="fill" style="width:${pct}%">★</span>★</span>`;
   }
-  if (!editableId) return `<span class="stars" aria-label="별점 ${v}점">${s}</span>`;
-  return `<span class="stars editable" data-id="${esc(editableId)}" data-value="${v}" tabindex="0"
-    role="slider" aria-label="내 별점" aria-valuemin="0" aria-valuemax="5" aria-valuenow="${v}"
-    title="왼쪽 절반을 누르면 0.5점 단위">${s}</span>`;
+  return s;
+}
+
+// 보기 전용 별점
+function starsHtml(value) {
+  const v = value || 0;
+  return `<span class="stars" aria-label="별점 ${v}점">${starSpans(v)}</span>`;
+}
+
+// 평가하기 버튼 / 펼쳐진 평가 패널(별을 끌어서 점수 지정)
+function rateUiHtml(it) {
+  const mine = it.ratings?.[state.me];
+  const d = state.rateDraft;
+  if (!d || d.id !== it.id) {
+    return `<div class="rate-bar"><button type="button" class="btn rate-btn" data-act="rate-open" data-id="${esc(it.id)}">${mine != null ? '내 별점 수정' : '평가하기'}</button></div>`;
+  }
+  return `<div class="rate-panel">
+    <div class="rate-panel-row">
+      <span class="drag-stars" tabindex="0" role="slider" aria-label="내 별점" aria-valuemin="0.5" aria-valuemax="5" aria-valuenow="${d.value}">${starSpans(d.value)}</span>
+      <span class="rate-value">${d.value.toFixed(1)}</span>
+    </div>
+    <div class="rate-hint">별을 누르거나 좌우로 끌어서 정해 주세요. (0.5점 단위)</div>
+    <div class="rate-actions">
+      ${mine != null ? '<button type="button" class="btn-link" data-act="rate-clear">별점 지우기</button>' : ''}
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-act="rate-cancel">취소</button>
+      <button type="button" class="btn primary" data-act="rate-save">저장</button>
+    </div>
+  </div>`;
 }
 
 function paintStars(el, v) {
   el.querySelectorAll('.fill').forEach((f, idx) => {
     f.style.width = Math.max(0, Math.min(1, v - idx)) * 100 + '%';
   });
-}
-
-function valueFromPointer(e) {
-  const star = e.target.closest('.star');
-  if (!star) return null;
-  const r = star.getBoundingClientRect();
-  const i = Number(star.dataset.i);
-  return (e.clientX - r.left) < r.width / 2 ? i - 0.5 : i;
 }
 
 function members(extra = []) {
@@ -229,7 +246,7 @@ function ratingRows(it) {
     const mine = name === state.me;
     return `<li class="rating-row ${mine ? 'mine' : ''}">
       <span class="who" title="${esc(name)}">${esc(name)}${mine ? ' (나)' : ''}</span>
-      ${starsHtml(v, mine ? it.id : null)}
+      ${starsHtml(v)}
       <span class="score">${v != null ? v.toFixed(1) : '-'}</span>
     </li>`;
   }).join('')}</ul>`;
@@ -242,7 +259,7 @@ async function rate(id, value) {
   try {
     await state.store.setRating(id, state.me, value);
     if (wasTodo && value != null) toast(`'${it.title}'을(를) 함께 본 콘텐츠로 옮겼습니다.`);
-    else if (value == null && Object.keys(it.ratings || {}).length <= 1) toast('별점이 모두 지워져 같이 볼 콘텐츠로 돌아갔습니다.');
+    else toast(value == null ? '내 별점을 지웠습니다.' : `${value.toFixed(1)}점으로 저장했습니다.`);
   } catch (e) { toast('저장하지 못했습니다. ' + e.message); }
 }
 
@@ -263,9 +280,13 @@ function cardHtml(it) {
     <div class="card-body">
       <a class="title" href="${itemHref(it.id)}">${esc(it.title)}</a>
       <div class="meta">${meta}${meta ? ' · ' : ''}${sub}</div>
-      ${it.watchedAt ? `<div class="avg">평균 <b>${fmtScore(a)}</b> / 5 · ${Object.keys(it.ratings).length}명</div>` : ''}
+      ${it.watchedAt
+        ? (a == null ? '<div class="avg">아직 평가가 없습니다</div>'
+          : `<div class="avg">평균 <b>${fmtScore(a)}</b> / 5 · ${Object.keys(it.ratings).length}명</div>`)
+        : ''}
       ${ratingRows(it)}
-      ${it.watchedAt ? '' : '<div class="todo-hint">보고 나서 별점을 남기면 함께 본 콘텐츠로 옮겨집니다.</div>'}
+      ${it.watchedAt ? '' : '<div class="todo-hint">보고 나서 평가하면 함께 본 콘텐츠로 옮겨집니다.</div>'}
+      ${rateUiHtml(it)}
     </div>
   </article>`;
 }
@@ -277,7 +298,7 @@ function renderList() {
   const watched = state.items.filter(i => i.watchedAt);
   const toWatch = state.items.filter(i => !i.watchedAt).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   if (state.sort === 'rating') {
-    watched.sort((a, b) => (avgOf(b.ratings) - avgOf(a.ratings)) || (b.watchedAt - a.watchedAt));
+    watched.sort((a, b) => ((avgOf(b.ratings) ?? -1) - (avgOf(a.ratings) ?? -1)) || (b.watchedAt - a.watchedAt));
   } else {
     watched.sort((a, b) => b.watchedAt - a.watchedAt);
   }
@@ -355,7 +376,7 @@ function renderDetailHead() {
         <div class="meta">${meta}${meta ? ' · ' : ''}${esc(it.addedBy || '')} 님이 추가 (${fmtDate(it.createdAt)})${it.watchedAt ? ` · ${fmtDate(it.watchedAt)} 첫 평가` : ''}</div>
         <div class="avg-big">평균 별점 <b>${fmtScore(a)}</b> / 5 <span>(${n}명 참여)</span></div>
         ${ratingRows(it)}
-        ${it.ratings?.[state.me] != null ? '<button type="button" class="btn-link clear-rating" data-act="clear-rating">내 별점 지우기</button>' : ''}
+        <div class="detail-rate">${rateUiHtml(it)}</div>
         <h3>줄거리 · 소개</h3>
         <p class="synopsis">${it.synopsis ? esc(it.synopsis) : '<span class="muted">아직 작성된 소개가 없습니다. 정보 수정에서 추가할 수 있습니다.</span>'}</p>
         <div class="detail-actions">
@@ -393,7 +414,6 @@ function renderPendingThumbs() {
 // ───────────── 콘텐츠 추가·수정 ─────────────
 function openItemModal(existing, initialStatus = 'todo') {
   let poster = existing?.posterUrl || '';
-  let myRating = 0;
   const isUrl = poster && !poster.startsWith('data:');
   const types = ['영화', '드라마', '기타'];
   const m = openModal(`
@@ -403,9 +423,6 @@ function openItemModal(existing, initialStatus = 'todo') {
       <div class="seg" role="radiogroup" aria-label="추가할 목록">
         <label><input type="radio" name="status" value="watched" ${initialStatus === 'watched' ? 'checked' : ''}>본 콘텐츠</label>
         <label><input type="radio" name="status" value="todo" ${initialStatus !== 'watched' ? 'checked' : ''}>보고 싶은 콘텐츠</label>
-      </div>
-      <div class="field" id="ratingField">내 별점 (본 콘텐츠는 별점과 함께 추가됩니다)
-        <div class="my-rating">${starsHtml(0, '__new')}<span class="score" id="newScore">선택 안 함</span></div>
       </div>`}
       <label>제목 <input name="title" required maxlength="100" value="${esc(existing?.title)}"></label>
       <div class="row2">
@@ -448,31 +465,8 @@ function openItemModal(existing, initialStatus = 'todo') {
   form.elements.title.addEventListener('input', () => { if (!poster) paint(); });
   $('#posterClear', m.el).addEventListener('click', () => { poster = ''; urlInput.value = ''; paint(); });
 
-  // 본 콘텐츠 / 보고 싶은 콘텐츠 선택과 별점
+  // 본 콘텐츠 / 보고 싶은 콘텐츠 선택 (별점은 목록의 평가하기 버튼으로)
   const status = () => form.elements.status?.value || 'todo';
-  const ratingField = $('#ratingField', m.el);
-  if (ratingField) {
-    const stars = $('.stars', ratingField);
-    const scoreEl = $('#newScore', m.el);
-    const syncStatus = () => { ratingField.hidden = status() !== 'watched'; };
-    const setRating = v => {
-      myRating = v; stars.dataset.value = v; paintStars(stars, v);
-      scoreEl.textContent = v ? `${v.toFixed(1)}점` : '선택 안 함';
-    };
-    form.querySelectorAll('input[name=status]').forEach(r => r.addEventListener('change', syncStatus));
-    stars.addEventListener('click', e => { const v = valueFromPointer(e); if (v != null) setRating(v); });
-    stars.addEventListener('pointermove', e => {
-      if (e.pointerType === 'touch') return;
-      const v = valueFromPointer(e); if (v != null) paintStars(stars, v);
-    });
-    stars.addEventListener('pointerleave', () => paintStars(stars, myRating));
-    stars.addEventListener('keydown', e => {
-      if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
-      e.preventDefault();
-      setRating(Math.max(0.5, Math.min(5, myRating + (e.key === 'ArrowRight' ? 0.5 : -0.5))));
-    });
-    syncStatus();
-  }
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
@@ -486,15 +480,14 @@ function openItemModal(existing, initialStatus = 'todo') {
     };
     if (!data.title) return;
     const watched = !existing && status() === 'watched';
-    if (watched && !myRating) { toast('본 콘텐츠는 내 별점을 함께 남겨 주세요.'); return; }
     const btn = form.querySelector('[type=submit]'); btn.disabled = true;
     try {
       if (existing) {
         await state.store.updateItem(existing.id, data);
         toast('저장했습니다.');
       } else if (watched) {
-        await state.store.addItem({ ...data, addedBy: state.me, ratings: { [state.me]: myRating }, watchedAt: Date.now() });
-        toast(`'${data.title}'을(를) 함께 본 콘텐츠에 추가했습니다.`);
+        await state.store.addItem({ ...data, addedBy: state.me, watchedAt: Date.now() });
+        toast(`'${data.title}'을(를) 함께 본 콘텐츠에 추가했습니다. 평가하기로 별점을 남겨 주세요.`);
       } else {
         await state.store.addItem({ ...data, addedBy: state.me });
         toast(`'${data.title}'을(를) 같이 볼 콘텐츠에 추가했습니다.`);
@@ -507,16 +500,6 @@ function openItemModal(existing, initialStatus = 'todo') {
 // ───────────── 이벤트 ─────────────
 function bindEvents() {
   view.addEventListener('click', async e => {
-    const stars = e.target.closest('.stars.editable');
-    if (stars) {
-      const v = valueFromPointer(e);
-      if (v != null && v !== Number(stars.dataset.value)) {
-        stars.dataset.value = v; paintStars(stars, v);
-        rate(stars.dataset.id, v);
-      }
-      return;
-    }
-
     const sortBtn = e.target.closest('[data-sort]');
     if (sortBtn) { state.sort = sortBtn.dataset.sort; lsSet(LS_SORT, state.sort); renderList(); return; }
 
@@ -532,7 +515,30 @@ function bindEvents() {
           catch (err) { toast('삭제하지 못했습니다. ' + err.message); }
         }
         break;
-      case 'clear-rating': if (it) rate(it.id, null); break;
+      case 'rate-open': {
+        const target = findItem(act.dataset.id);
+        if (!target) break;
+        state.rateDraft = { id: target.id, value: target.ratings?.[state.me] ?? 0 };
+        onItemsChanged();
+        const ds = view.querySelector('.drag-stars'); if (ds) ds.focus({ preventScroll: true });
+        break;
+      }
+      case 'rate-cancel': state.rateDraft = null; onItemsChanged(); break;
+      case 'rate-save': {
+        const d = state.rateDraft;
+        if (!d) break;
+        if (!d.value) { toast('별을 눌러 점수를 정해 주세요.'); break; }
+        state.rateDraft = null; onItemsChanged();
+        rate(d.id, d.value);
+        break;
+      }
+      case 'rate-clear': {
+        const d = state.rateDraft;
+        if (!d) break;
+        state.rateDraft = null; onItemsChanged();
+        rate(d.id, null);
+        break;
+      }
       case 'del-post':
         if (confirm('이 기록을 삭제할까요?')) {
           try { await state.store.deletePost(state.currentId, act.dataset.post); }
@@ -548,24 +554,40 @@ function bindEvents() {
     }
   });
 
-  // 별점 미리보기(마우스를 올리면 칠해짐)
-  view.addEventListener('pointermove', e => {
-    const stars = e.target.closest('.stars.editable');
-    if (!stars || e.pointerType === 'touch') return;
-    const v = valueFromPointer(e); if (v != null) paintStars(stars, v);
-  });
-  view.addEventListener('pointerout', e => {
-    const stars = e.target.closest('.stars.editable');
-    if (stars && !stars.contains(e.relatedTarget)) paintStars(stars, Number(stars.dataset.value));
-  });
-  // 키보드: 좌우 화살표로 0.5점씩
-  view.addEventListener('keydown', e => {
-    const stars = e.target.closest('.stars.editable');
-    if (!stars || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+  // 평가 패널: 별을 누르거나 끌어서 0.5점 단위로 지정
+  let dragging = null;
+  const dragValue = (el, x) => {
+    const r = el.getBoundingClientRect();
+    return Math.max(0.5, Math.min(5, Math.ceil(((x - r.left) / r.width) * 10) / 2));
+  };
+  const setDraft = (el, v) => {
+    if (!state.rateDraft) return;
+    state.rateDraft.value = v;
+    paintStars(el, v);
+    el.setAttribute('aria-valuenow', v);
+    const lbl = el.closest('.rate-panel')?.querySelector('.rate-value');
+    if (lbl) lbl.textContent = v.toFixed(1);
+  };
+  view.addEventListener('pointerdown', e => {
+    const el = e.target.closest('.drag-stars');
+    if (!el) return;
     e.preventDefault();
-    const cur = Number(stars.dataset.value);
-    const v = Math.max(0.5, Math.min(5, cur + (e.key === 'ArrowRight' ? 0.5 : -0.5)));
-    if (v !== cur) { stars.dataset.value = v; paintStars(stars, v); rate(stars.dataset.id, v); }
+    dragging = el;
+    try { el.setPointerCapture(e.pointerId); } catch { /* 일부 브라우저 무시 */ }
+    setDraft(el, dragValue(el, e.clientX));
+  });
+  view.addEventListener('pointermove', e => { if (dragging) setDraft(dragging, dragValue(dragging, e.clientX)); });
+  const endDrag = () => { dragging = null; };
+  view.addEventListener('pointerup', endDrag);
+  view.addEventListener('pointercancel', endDrag);
+  // 키보드: 좌우 화살표로 0.5점씩, Enter로 저장
+  view.addEventListener('keydown', e => {
+    const el = e.target.closest('.drag-stars');
+    if (!el || !state.rateDraft) return;
+    if (e.key === 'Enter') { e.preventDefault(); el.closest('.rate-panel').querySelector('[data-act=rate-save]').click(); return; }
+    if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    e.preventDefault();
+    setDraft(el, Math.max(0.5, Math.min(5, state.rateDraft.value + (e.key === 'ArrowRight' ? 0.5 : -0.5))));
   });
 
   view.addEventListener('change', async e => {
@@ -615,6 +637,7 @@ function route() {
   if (state.unsubPosts) { state.unsubPosts(); state.unsubPosts = null; }
   state.posts = [];
   state.currentId = null;
+  state.rateDraft = null;
   if (r.name === 'item') {
     state.currentId = r.id;
     renderDetailShell();

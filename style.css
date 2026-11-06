@@ -23,7 +23,7 @@ body {
   background: var(--bg);
   color: var(--on-bg);
   transition: background-color .2s;
-  font: 15px/1.55 "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  font: 15px/1.6 "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
 a { color: inherit; }
 img { display: block; max-width: 100%; }
@@ -177,3 +177,35 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .custom-color { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
 .custom-color input[type=color] { width: 48px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; }
 [hidden] { display: none !important; }
+
+/* ── 귀여운 폰트: 제목·버튼은 주아체, 본문은 고운돋움 ── */
+.brand, .section-head h2, .card .title, .detail h1, .detail h3, .modal h2, .btn, .sort button,
+.seg label, .avg b, .avg-big b, .post-head .author, .rate-value, .badge, .swatch, .rating-row.mine .who {
+  font-family: "Jua", "Gowun Dodum", "Malgun Gothic", sans-serif;
+  font-weight: 400;
+}
+.brand { font-size: 21px; }
+.section-head h2 { font-size: 20px; }
+.card .title { font-size: 17px; }
+.detail h1 { font-size: 27px; }
+.card, .detail, .post, .post-form, .empty, .modal, .btn { border-radius: 10px; }
+.poster-img, .poster-none { border-radius: 8px; }
+.btn { border-radius: 999px; padding: 7px 16px; }
+.sort { border-radius: 999px; }
+.stars, .drag-stars, .star { font-family: "Segoe UI Symbol", "Apple Symbols", system-ui, sans-serif; }
+
+/* ── 평가하기 ── */
+.rate-bar { margin-top: auto; padding-top: 10px; display: flex; justify-content: flex-end; }
+.rate-btn { color: var(--accent); border-color: var(--accent); }
+.rate-btn:hover { background: var(--accent-soft); }
+.rate-panel { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px; }
+.rate-panel-row { display: flex; align-items: center; gap: 10px; }
+.drag-stars { display: inline-flex; font-size: 30px; line-height: 1; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.drag-stars:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.rate-value { font-size: 22px; color: var(--accent); min-width: 40px; }
+.rate-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.rate-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.rate-actions .spacer { flex: 1; }
+.rate-actions .btn { padding: 5px 14px; }
+.detail-rate { max-width: 380px; }
+.detail-rate .rate-bar { justify-content: flex-start; }

@@ -19,13 +19,14 @@ export async function createStore(cfg, room) {
   return createLocalStore();
 }
 
-// 별점 변경 규칙: 첫 별점이 생기면 watchedAt 기록, 모든 별점이 지워지면 다시 '같이 볼 콘텐츠'로
+// 별점 변경 규칙: 첫 별점이 생기면 watchedAt 기록('함께 본 콘텐츠'로 이동).
+// 한 번 함께 본 콘텐츠가 되면 별점을 지워도 그대로 유지
 function applyRating(item, name, score) {
   const ratings = { ...(item.ratings || {}) };
   if (score == null) delete ratings[name];
   else ratings[name] = score;
   const has = Object.keys(ratings).length > 0;
-  return { ratings, watchedAt: has ? (item.watchedAt || Date.now()) : null };
+  return { ratings, watchedAt: item.watchedAt || (has ? Date.now() : null) };
 }
 
 function checkSize(obj, what) {
