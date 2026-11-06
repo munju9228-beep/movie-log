@@ -7,7 +7,63 @@ const view = $('#view');
 const LS_NAME = 'movielog:name';
 const LS_ROOM = 'movielog:room';
 const LS_SORT = 'movielog:sort';
+const LS_THEME = 'movielog:theme';
 const MAX_PHOTOS = 3;
+
+// ───────────── 배경 색상(사용자별, 이 브라우저에 저장) ─────────────
+const DEFAULT_THEME = '#f7c6d5';
+const THEMES = [
+  { name: '사쿠라 핑크', color: '#f7c6d5' },
+  { name: '연분홍', color: '#fce4ec' },
+  { name: '하늘', color: '#d9e9f8' },
+  { name: '민트', color: '#d4efe2' },
+  { name: '라벤더', color: '#e4dbf5' },
+  { name: '크림', color: '#f8eed5' },
+  { name: '기본 회색', color: '#f3f4f6' },
+  { name: '밤하늘', color: '#1f2937' }
+];
+
+function hexToHsl(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h *= 60;
+  }
+  return { h, s: s * 100, l: l * 100 };
+}
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = n => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
+  return '#' + [f(0), f(8), f(4)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+// 고른 배경색 하나로 버튼·강조색·글자색을 자동으로 맞춤
+function applyTheme(hex) {
+  if (!/^#[0-9a-f]{6}$/i.test(hex || '')) hex = DEFAULT_THEME;
+  const { h, s, l } = hexToHsl(hex);
+  const dark = l < 45;
+  const grey = s < 12;
+  const accent = grey ? '#2c4a72' : hslToHex(h, Math.min(Math.max(s, 40), 70), 42);
+  const accentHover = grey ? '#233c5e' : hslToHex(h, Math.min(Math.max(s, 40), 70), 34);
+  const soft = grey ? '#e8eef6' : hslToHex(h, Math.min(s, 70), 94);
+  const root = document.documentElement.style;
+  root.setProperty('--bg', hex);
+  root.setProperty('--accent', dark && !grey ? hslToHex(h, 60, 55) : accent);
+  root.setProperty('--accent-hover', accentHover);
+  root.setProperty('--accent-soft', soft);
+  root.setProperty('--on-bg', dark ? '#f3f4f6' : '#222831');
+  root.setProperty('--on-bg-muted', dark ? '#c3c8d0' : grey ? '#6b7280' : hslToHex(h, 12, 36));
+  const meta = document.querySelector('meta[name=theme-color]');
+  if (meta) meta.content = hex;
+}
+applyTheme(localStorage.getItem(LS_THEME) || DEFAULT_THEME);
 
 const state = {
   store: null,
@@ -73,6 +129,30 @@ function openModal(html, { dismissible = true, className = '' } = {}) {
   });
   setTimeout(() => { const f = ov.querySelector('input:not([type=file]), textarea'); if (f) f.focus(); });
   return { el: ov, close };
+}
+
+function openThemeModal() {
+  const current = (lsGet(LS_THEME) || DEFAULT_THEME).toLowerCase();
+  const m = openModal(`
+    <h2>배경 색상</h2>
+    <p>내 화면에만 적용됩니다. 친구들은 각자 원하는 색을 고를 수 있습니다.</p>
+    <div class="swatches">${THEMES.map(t => `
+      <button type="button" class="swatch ${t.color === current ? 'on' : ''}" data-color="${t.color}">
+        <i style="background:${t.color}"></i>${t.name}
+      </button>`).join('')}</div>
+    <label class="custom-color">직접 고르기 <input type="color" id="customColor" value="${current}"></label>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="themeReset">기본값(사쿠라 핑크)</button>
+      <button type="button" class="btn primary" data-close>닫기</button>
+    </div>`);
+  const pick = color => {
+    lsSet(LS_THEME, color); applyTheme(color);
+    m.el.querySelectorAll('.swatch').forEach(b => b.classList.toggle('on', b.dataset.color === color));
+    $('#customColor', m.el).value = color;
+  };
+  m.el.querySelectorAll('.swatch').forEach(b => b.addEventListener('click', () => pick(b.dataset.color)));
+  $('#customColor', m.el).addEventListener('input', e => pick(e.target.value.toLowerCase()));
+  $('#themeReset', m.el).addEventListener('click', () => pick(DEFAULT_THEME));
 }
 
 // 이름(및 방 코드) 입력
@@ -206,19 +286,22 @@ function renderList() {
     <section class="section">
       <div class="section-head">
         <h2>함께 본 콘텐츠<span class="count">${watched.length}</span></h2>
-        <div class="sort" role="group" aria-label="정렬">
-          <button type="button" data-sort="recent" class="${state.sort === 'recent' ? 'on' : ''}">최신순</button>
-          <button type="button" data-sort="rating" class="${state.sort === 'rating' ? 'on' : ''}">별점순</button>
+        <div class="head-actions">
+          <div class="sort" role="group" aria-label="정렬">
+            <button type="button" data-sort="recent" class="${state.sort === 'recent' ? 'on' : ''}">최신순</button>
+            <button type="button" data-sort="rating" class="${state.sort === 'rating' ? 'on' : ''}">별점순</button>
+          </div>
+          <button type="button" class="btn primary" data-act="add" data-status="watched">+ 본 콘텐츠 추가</button>
         </div>
       </div>
       ${watched.length
         ? `<div class="card-grid">${watched.map(cardHtml).join('')}</div>`
-        : '<p class="empty">아직 함께 본 콘텐츠가 없습니다. 아래 목록에서 별점을 남기면 이곳으로 옮겨집니다.</p>'}
+        : '<p class="empty">아직 함께 본 콘텐츠가 없습니다. 이미 본 콘텐츠를 바로 추가하거나, 아래 목록에서 별점을 남기면 이곳으로 옮겨집니다.</p>'}
     </section>
     <section class="section">
       <div class="section-head">
         <h2>같이 볼 콘텐츠<span class="count">${toWatch.length}</span></h2>
-        <button type="button" class="btn primary" data-act="add">+ 콘텐츠 추가</button>
+        <button type="button" class="btn primary" data-act="add" data-status="todo">+ 보고 싶은 콘텐츠 추가</button>
       </div>
       ${toWatch.length
         ? `<div class="card-grid">${toWatch.map(cardHtml).join('')}</div>`
@@ -308,13 +391,22 @@ function renderPendingThumbs() {
 }
 
 // ───────────── 콘텐츠 추가·수정 ─────────────
-function openItemModal(existing) {
+function openItemModal(existing, initialStatus = 'todo') {
   let poster = existing?.posterUrl || '';
+  let myRating = 0;
   const isUrl = poster && !poster.startsWith('data:');
   const types = ['영화', '드라마', '기타'];
   const m = openModal(`
-    <h2>${existing ? '정보 수정' : '같이 볼 콘텐츠 추가'}</h2>
+    <h2>${existing ? '정보 수정' : '콘텐츠 추가'}</h2>
     <form class="form" id="itemForm">
+      ${existing ? '' : `
+      <div class="seg" role="radiogroup" aria-label="추가할 목록">
+        <label><input type="radio" name="status" value="watched" ${initialStatus === 'watched' ? 'checked' : ''}>본 콘텐츠</label>
+        <label><input type="radio" name="status" value="todo" ${initialStatus !== 'watched' ? 'checked' : ''}>보고 싶은 콘텐츠</label>
+      </div>
+      <div class="field" id="ratingField">내 별점 (본 콘텐츠는 별점과 함께 추가됩니다)
+        <div class="my-rating">${starsHtml(0, '__new')}<span class="score" id="newScore">선택 안 함</span></div>
+      </div>`}
       <label>제목 <input name="title" required maxlength="100" value="${esc(existing?.title)}"></label>
       <div class="row2">
         <label>구분
@@ -356,6 +448,32 @@ function openItemModal(existing) {
   form.elements.title.addEventListener('input', () => { if (!poster) paint(); });
   $('#posterClear', m.el).addEventListener('click', () => { poster = ''; urlInput.value = ''; paint(); });
 
+  // 본 콘텐츠 / 보고 싶은 콘텐츠 선택과 별점
+  const status = () => form.elements.status?.value || 'todo';
+  const ratingField = $('#ratingField', m.el);
+  if (ratingField) {
+    const stars = $('.stars', ratingField);
+    const scoreEl = $('#newScore', m.el);
+    const syncStatus = () => { ratingField.hidden = status() !== 'watched'; };
+    const setRating = v => {
+      myRating = v; stars.dataset.value = v; paintStars(stars, v);
+      scoreEl.textContent = v ? `${v.toFixed(1)}점` : '선택 안 함';
+    };
+    form.querySelectorAll('input[name=status]').forEach(r => r.addEventListener('change', syncStatus));
+    stars.addEventListener('click', e => { const v = valueFromPointer(e); if (v != null) setRating(v); });
+    stars.addEventListener('pointermove', e => {
+      if (e.pointerType === 'touch') return;
+      const v = valueFromPointer(e); if (v != null) paintStars(stars, v);
+    });
+    stars.addEventListener('pointerleave', () => paintStars(stars, myRating));
+    stars.addEventListener('keydown', e => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+      e.preventDefault();
+      setRating(Math.max(0.5, Math.min(5, myRating + (e.key === 'ArrowRight' ? 0.5 : -0.5))));
+    });
+    syncStatus();
+  }
+
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const fd = new FormData(form);
@@ -367,11 +485,16 @@ function openItemModal(existing) {
       posterUrl: poster
     };
     if (!data.title) return;
+    const watched = !existing && status() === 'watched';
+    if (watched && !myRating) { toast('본 콘텐츠는 내 별점을 함께 남겨 주세요.'); return; }
     const btn = form.querySelector('[type=submit]'); btn.disabled = true;
     try {
       if (existing) {
         await state.store.updateItem(existing.id, data);
         toast('저장했습니다.');
+      } else if (watched) {
+        await state.store.addItem({ ...data, addedBy: state.me, ratings: { [state.me]: myRating }, watchedAt: Date.now() });
+        toast(`'${data.title}'을(를) 함께 본 콘텐츠에 추가했습니다.`);
       } else {
         await state.store.addItem({ ...data, addedBy: state.me });
         toast(`'${data.title}'을(를) 같이 볼 콘텐츠에 추가했습니다.`);
@@ -401,7 +524,7 @@ function bindEvents() {
     if (!act) return;
     const it = findItem(state.currentId);
     switch (act.dataset.act) {
-      case 'add': openItemModal(); break;
+      case 'add': openItemModal(null, act.dataset.status); break;
       case 'edit': if (it) openItemModal(it); break;
       case 'delete':
         if (it && confirm(`'${it.title}'과(와) 남긴 별점·기록을 모두 삭제할까요? 되돌릴 수 없습니다.`)) {
@@ -471,6 +594,8 @@ function bindEvents() {
     } catch (err) { toast('저장하지 못했습니다. ' + err.message); }
     btn.disabled = false;
   });
+
+  $('#btnTheme').addEventListener('click', openThemeModal);
 
   $('#btnChangeName').addEventListener('click', async () => {
     const r = await askIdentity({ needRoom: false, cancellable: true });

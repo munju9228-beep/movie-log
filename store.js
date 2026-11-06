@@ -78,7 +78,7 @@ function createLocalStore() {
     },
     async addItem(data) {
       const id = uid();
-      db.items[id] = { ...data, id, ratings: {}, watchedAt: null, createdAt: Date.now() };
+      db.items[id] = { ratings: {}, watchedAt: null, ...data, id, createdAt: Date.now() };
       save(); return id;
     },
     async updateItem(id, patch) {
@@ -133,7 +133,7 @@ async function createFirebaseStore(firebaseConfig, room) {
       return onSnapshot(postsCol(itemId), s => cb(rows(s)), onErr);
     },
     async addItem(data) {
-      const docData = { ...data, ratings: {}, watchedAt: null, createdAt: Date.now() };
+      const docData = { ratings: {}, watchedAt: null, ...data, createdAt: Date.now() };
       checkSize(docData, '포스터 이미지');
       const ref = await addDoc(itemsCol, docData);
       return ref.id;

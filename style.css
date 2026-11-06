@@ -1,12 +1,16 @@
 :root {
-  --bg: #f3f4f6;
+  /* 기본 테마: 사쿠라 핑크 (사용자가 고른 색이 있으면 app.js 가 덮어씀) */
+  --bg: #f7c6d5;
+  --on-bg: #222831;
+  --on-bg-muted: #5f5560;
   --surface: #ffffff;
   --line: #d8dbe0;
   --line-soft: #e8eaed;
   --text: #222831;
   --muted: #6b7280;
-  --accent: #2c4a72;
-  --accent-soft: #e8eef6;
+  --accent: #b8335f;
+  --accent-hover: #9a2a50;
+  --accent-soft: #fbe6ee;
   --star-off: #d0d4da;
   --star-on: #f2a900;
   --danger: #b42318;
@@ -17,7 +21,8 @@
 html, body { margin: 0; }
 body {
   background: var(--bg);
-  color: var(--text);
+  color: var(--on-bg);
+  transition: background-color .2s;
   font: 15px/1.55 "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
 a { color: inherit; }
@@ -38,7 +43,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); cursor: pointer; font-size: 14px; white-space: nowrap; }
 .btn:hover { background: #f7f8fa; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { background: #233c5e; }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn.danger { color: var(--danger); }
 .btn:disabled { opacity: .55; cursor: default; }
 .btn-link { border: 0; background: none; padding: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 13px; }
@@ -46,9 +51,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ── 섹션 ── */
 .section { margin-bottom: 36px; }
-.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 2px solid var(--text); padding-bottom: 8px; margin-bottom: 16px; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 2px solid var(--accent); padding-bottom: 8px; margin-bottom: 16px; }
 .section-head h2 { margin: 0; font-size: 18px; }
-.count { color: var(--muted); font-weight: 400; font-size: 15px; margin-left: 4px; }
+.count { color: var(--on-bg-muted); font-weight: 400; font-size: 15px; margin-left: 4px; }
 .sort { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .sort button { border: 0; background: var(--surface); padding: 6px 12px; cursor: pointer; font-size: 13px; }
 .sort button + button { border-left: 1px solid var(--line); }
@@ -84,8 +89,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .stars.editable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 
 /* ── 상세 ── */
-.back { display: inline-block; margin-bottom: 14px; color: var(--muted); text-decoration: none; font-size: 14px; }
-.back:hover { color: var(--text); }
+.back { display: inline-block; margin-bottom: 14px; color: var(--on-bg-muted); text-decoration: none; font-size: 14px; }
+.back:hover { color: var(--on-bg); }
 .detail { display: grid; grid-template-columns: 240px 1fr; gap: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 28px; }
 .detail h1 { margin: 6px 0 4px; font-size: 24px; line-height: 1.3; overflow-wrap: anywhere; }
 .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 3px; background: #eef0f3; color: var(--muted); }
@@ -146,3 +151,29 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .detail-poster { max-width: 200px; }
   .card .poster { flex-basis: 88px; }
 }
+
+/* 배경 위가 아닌 흰 바탕 요소는 항상 기본 글자색 */
+.topbar, .card, .detail, .post, .post-form, .empty, .modal, .sort, .btn, .toast { color: var(--text); }
+.toast { color: #fff; }
+.btn.primary { color: #fff; }
+.section-head .hint { color: var(--on-bg-muted); }
+.head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── 추가 창: 본 콘텐츠 / 보고 싶은 콘텐츠 ── */
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.seg label { flex-direction: row; align-items: center; justify-content: center; padding: 9px 6px; cursor: pointer; color: var(--text); font-size: 14px; text-align: center; }
+.seg label + label { border-left: 1px solid var(--line); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--accent); color: #fff; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -3px; }
+.my-rating { display: flex; align-items: center; gap: 10px; color: var(--text); }
+.my-rating .score { color: var(--muted); font-size: 14px; }
+
+/* ── 색상 설정 ── */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; cursor: pointer; font-size: 12px; color: var(--text); }
+.swatch i { width: 100%; height: 32px; border-radius: 4px; border: 1px solid rgba(0,0,0,.08); }
+.swatch.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.custom-color { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
+.custom-color input[type=color] { width: 48px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; }
+[hidden] { display: none !important; }
