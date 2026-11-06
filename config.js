@@ -16,7 +16,14 @@ window.APP_CONFIG = {
   // 저장소가 공개(public)라면 여기에 적지 말고 비워 두는 편이 좋습니다(코드가 그대로 노출됨).
   roomCode: '',
 
-  firebase: null
+  firebase: {
+  apiKey: "AIzaSyBCLrmGf_v2bKTXx2_ZQqbX89dNMW8-E5o",
+  authDomain: "movie-log-b6315.firebaseapp.com",
+  projectId: "movie-log-b6315",
+  storageBucket: "movie-log-b6315.firebasestorage.app",
+  messagingSenderId: "943811217061",
+  appId: "1:943811217061:web:6e76f9274c424f76e46f4c"
+}
 
   // 예시)
   // firebase: {
