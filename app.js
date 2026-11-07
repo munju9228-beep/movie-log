@@ -75,7 +75,9 @@ const state = {
   posts: [],
   unsubPosts: null,
   pendingPhotos: [],
-  rateDraft: null // 평가하기 패널이 열린 콘텐츠 { id, value }
+  rateDraft: null, // 평가하기 패널이 열린 콘텐츠 { id, value }
+  meta: {},
+  renaming: false
 };
 
 // ───────────── 공통 도우미 ─────────────
@@ -154,6 +156,66 @@ function openThemeModal() {
   m.el.querySelectorAll('.swatch').forEach(b => b.addEventListener('click', () => pick(b.dataset.color)));
   $('#customColor', m.el).addEventListener('input', e => pick(e.target.value.toLowerCase()));
   $('#themeReset', m.el).addEventListener('click', () => pick(DEFAULT_THEME));
+}
+
+// 이름 변경: 지금까지 남긴 별점·글·추가 기록을 새 이름으로 옮김
+function openRenameModal() {
+  const others = members().filter(n => n !== state.me);
+  const m = openModal(`
+    <h2>이름 변경</h2>
+    <p>지금까지 남긴 별점과 글이 새 이름으로 함께 옮겨집니다.</p>
+    <form class="form" id="renameForm">
+      <label>새 이름 <input name="name" required maxlength="12" value="${esc(state.me)}"></label>
+      ${others.length ? `
+      <div class="field">예전에 쓰던 이름이 따로 남아 있다면 체크해서 합쳐 주세요.
+        <div class="merge-list">${others.map(n =>
+          `<label class="check"><input type="checkbox" name="merge" value="${esc(n)}">${esc(n)}</label>`).join('')}</div>
+        <span class="hint">친구 이름은 체크하지 마세요. 체크한 이름의 별점과 글이 모두 내 것으로 바뀝니다.</span>
+      </div>` : ''}
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close>취소</button>
+        <button class="btn primary" type="submit">변경</button>
+      </div>
+    </form>`);
+  const form = $('#renameForm', m.el);
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const name = String(fd.get('name') || '').trim();
+    const merges = fd.getAll('merge').map(String);
+    if (!name) return;
+    if (name === state.me && !merges.length) { m.close(); return; }
+    if (others.includes(name) && !merges.includes(name) &&
+        !confirm(`'${name}' 이름이 이미 있습니다. 내가 예전에 쓰던 이름이라면 기록이 합쳐집니다. 계속할까요?`)) return;
+
+    const btn = form.querySelector('[type=submit]');
+    btn.disabled = true; btn.textContent = '옮기는 중…';
+    state.renaming = true;
+    try {
+      await state.store.renameUser([state.me, ...merges], name);
+      state.me = name; lsSet(LS_NAME, name);
+      updateMe(); onItemsChanged();
+      if (state.currentId) renderPosts();
+      m.close();
+      toast(`'${name}'(으)로 바꾸고 기록을 옮겼습니다.`);
+    } catch (err) {
+      toast('이름을 바꾸지 못했습니다. ' + err.message);
+      btn.disabled = false; btn.textContent = '변경';
+    } finally {
+      state.renaming = false;
+    }
+  });
+}
+
+// 다른 기기에서 이름을 바꾼 경우: 이 기기에 남은 예전 이름을 새 이름으로 자동 전환
+function followRename() {
+  const r = state.meta?.renamed || {};
+  let n = state.me;
+  const seen = new Set();
+  while (r[n] && !seen.has(n)) { seen.add(n); n = r[n]; }
+  if (n === state.me) return;
+  state.me = n; lsSet(LS_NAME, n); updateMe();
+  if (!state.renaming) toast(`이름이 '${n}'(으)로 바뀌어 반영했습니다.`);
 }
 
 // 이름(및 방 코드) 입력
@@ -619,10 +681,9 @@ function bindEvents() {
 
   $('#btnTheme').addEventListener('click', openThemeModal);
 
-  $('#btnChangeName').addEventListener('click', async () => {
-    const r = await askIdentity({ needRoom: false, cancellable: true });
-    state.me = r.name; updateMe(); onItemsChanged();
-    if (state.currentId) renderPosts();
+  $('#btnChangeName').addEventListener('click', () => {
+    if (!state.store) return;
+    openRenameModal();
   });
 }
 
@@ -696,7 +757,12 @@ async function boot() {
   }
 
   state.store.subscribeItems(
-    items => { state.items = items; state.itemsLoaded = true; onItemsChanged(); },
+    (items, meta) => {
+      state.items = items; state.meta = meta || {}; state.itemsLoaded = true;
+      followRename();
+      onItemsChanged();
+      if (state.currentId) renderPosts();
+    },
     err => toast('목록을 불러오지 못했습니다. ' + err.message)
   );
   window.addEventListener('hashchange', route);
